@@ -1081,8 +1081,10 @@ ERROR_GATEWAY_RESPONSE = GatewayResponse(
 def _process_payment_transaction_returns_error(*args, **kwards):
     return ERROR_GATEWAY_RESPONSE
 
+
 def _process_payment_raise_error(*args, **kwargs):
     raise Exception("Oops! Something went wrong.")
+
 
 @pytest.fixture(
     params=[_process_payment_raise_error, _process_payment_transaction_returns_error]
@@ -1117,6 +1119,7 @@ def test_checkout_complete_does_not_delete_checkout_after_unsuccessful_payment(
     address,
     shipping_method,
 ):
+    expected_error ="Oops! Something went wrong." 
     mock_get_manager.process_payment.side_effect = error_side_effect
     expected_voucher_usage_count = voucher.used
     checkout = checkout_with_voucher
@@ -1142,12 +1145,13 @@ def test_checkout_complete_does_not_delete_checkout_after_unsuccessful_payment(
     response = user_api_client.post_graphql(MUTATION_CHECKOUT_COMPLETE, variables)
     content = get_graphql_content(response)
     data = content["data"]["checkoutComplete"]
-    assert data["errors"] == [{"field": None, "message": "Oops! Something went wrong."}]
+    assert data["errors"] == [{"field": None, "message": expected_error}]
 
     assert Order.objects.count() == orders_count
 
     payment.refresh_from_db(fields=["order"])
-    assert payment.transactions.count() == 0
+    transaction = payment.transactions.get()
+    assert transaction.error == expected_error
     assert payment.order is None
 
     # ensure the voucher usage count was not incremented
